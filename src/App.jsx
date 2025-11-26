@@ -99,17 +99,94 @@ const UNIVERSITY_CONFIG = {
 };
 
 // --- DATOS POR DEFECTO ---
+// --- DATOS POR DEFECTO (ING. MECÁNICA) ---
 const DEFAULT_SUBJECTS_DATA = [
-    { id: 'MAT-0140', name: 'Matemática Básica', credits: 4, prereqs: [] },
-    { id: 'LET-0110', name: 'Lengua Española I', credits: 3, prereqs: [] },
-    { id: 'FIS-0140', name: 'Física Básica', credits: 4, prereqs: [] },
-    { id: 'QUI-0140', name: 'Química Básica', credits: 3, prereqs: [] },
+    // Semestre 1
     { id: 'DOP-1000', name: 'Orientación Institucional', credits: 1, prereqs: [] },
+    { id: 'EFS-0110', name: 'Educación Física', credits: 1, prereqs: [] },
+    { id: 'FIL-0110', name: 'Int a la Filosofía', credits: 3, prereqs: [] },
+    { id: 'FIS-0140', name: 'Física Básica', credits: 4, prereqs: [] },
+    { id: 'HIS-0110', name: 'Fund de Hist Social Dom', credits: 3, prereqs: [] },
+    { id: 'IEM-2710', name: 'Campo De La IEM', credits: 2, prereqs: [] },
+    { id: 'LET-0110', name: 'Lengua Española I', credits: 3, prereqs: [] },
+    { id: 'MAT-0140', name: 'Matemática Básica', credits: 4, prereqs: [] },
+    { id: 'QUI-0140', name: 'Química Básica', credits: 3, prereqs: [] },
+    // Semestre 2
+    { id: 'ARQ-1210', name: 'Geometría Descriptiva', credits: 3, prereqs: [] },
+    { id: 'FIS-2110', name: 'Física General I', credits: 3, prereqs: ['FIS-0140', 'MAT-0140'] },
+    { id: 'FIS-2210', name: 'Lab Física General I', credits: 1, prereqs: ['FIS-0140', 'MAT-0140'] },
+    { id: 'LET-0120', name: 'Lengua Española II', credits: 3, prereqs: ['LET-0110'] },
     { id: 'MAT-2300', name: 'Álgebra Superior', credits: 5, prereqs: ['MAT-0140'] },
     { id: 'MAT-2510', name: 'Cálculo y Analítica I', credits: 6, prereqs: ['MAT-2300'] },
-    { id: 'FIS-2110', name: 'Física General I', credits: 3, prereqs: ['FIS-0140', 'MAT-0140'] },
-    { id: 'IEM-3490', name: 'Dibujo Mecánico', credits: 4, prereqs: [] }, // Simplificado
-    { id: 'IEM-3650', name: 'Termodinámica I', credits: 4, prereqs: ['FIS-2110'] },
+    { id: 'SOC-0110', name: 'Int a las Ciencias Sociales', credits: 2, prereqs: [] },
+    // Semestre 3
+    { id: 'ARQ-1060', name: 'Dibujo Técnico I-G', credits: 4, prereqs: ['ARQ-1210'] },
+    { id: 'BIO-0140', name: 'Biología Básica', credits: 3, prereqs: [] },
+    { id: 'FIS-2120', name: 'Física General II', credits: 3, prereqs: ['FIS-2110', 'FIS-2210'] },
+    { id: 'FIS-2220', name: 'Lab Física General II', credits: 1, prereqs: ['FIS-2110', 'FIS-2210'] },
+    { id: 'MAT-3500', name: 'Cálculo y Analítica II', credits: 6, prereqs: ['MAT-2510', 'MAT-2300'] },
+    { id: 'MAT-3700', name: 'Calc Vect y Álg Matricial', credits: 5, prereqs: ['MAT-2510'] },
+    // Semestre 4
+    { id: 'CIV-2010', name: 'Mecánica Racional I', credits: 5, prereqs: ['FIS-2120', 'MAT-3700'] },
+    { id: 'EST-1210', name: 'Estadística Industrial', credits: 3, prereqs: ['MAT-2300', 'MAT-0140'] },
+    { id: 'FIS-2150', name: 'Física General III', credits: 5, prereqs: ['FIS-2120', 'FIS-2220'] },
+    { id: 'FIS-2250', name: 'Lab Física General III', credits: 2, prereqs: ['FIS-2120', 'FIS-2220'] },
+    { id: 'MAT-3600', name: 'Ecuaciones Diferenciales', credits: 5, prereqs: ['MAT-3500'] },
+    { id: 'QUI-1110', name: 'Química Inorgánica', credits: 5, prereqs: ['QUI-0140'] },
+    // Semestre 5
+    { id: 'CIV-2020', name: 'Mecánica Racional II', credits: 5, prereqs: ['CIV-2010', 'MAT-3600'] },
+    { id: 'ECN-1100', name: 'Nociones de Economía', credits: 3, prereqs: [] },
+    { id: 'FIL-1240', name: 'Metodología Inv Cientif', credits: 3, prereqs: ['FIL-0110'] },
+    { id: 'IEM-2020', name: 'Electrotecnia General', credits: 3, prereqs: ['FIS-2150', 'MAT-3600'] },
+    { id: 'IEM-2030', name: 'Lab Electrotecnia Gral', credits: 1, prereqs: ['FIS-2150'] },
+    { id: 'INF-1010', name: 'Int Al Proc de Datos', credits: 4, prereqs: ['MAT-0140'] },
+    { id: 'MAT-3710', name: 'Met Matemáticos Para Ing', credits: 5, prereqs: ['MAT-3600'] },
+    // Semestre 6
+    { id: 'IEM-2050', name: 'Fundamentos de Electrónica', credits: 3, prereqs: ['IEM-2020'] },
+    { id: 'IEM-2060', name: 'Lab Fund. Electrónica', credits: 1, prereqs: ['IEM-2020'] },
+    { id: 'IEM-3310', name: 'Ciencia de Los Materiales', credits: 3, prereqs: ['FIS-2150', 'QUI-1110'] },
+    { id: 'IEM-3470', name: 'Mecánica de Materiales I', credits: 4, prereqs: ['CIV-2010', 'MAT-3600'] },
+    { id: 'IEM-3490', name: 'Dibujo Mecánico', credits: 4, prereqs: ['ARQ-1060', 'CIV-2020'] },
+    { id: 'IEM-3500', name: 'Mediciones Mecánicas', credits: 2, prereqs: ['CIV-2020', 'FIS-2150'] },
+    { id: 'IEM-3650', name: 'Termodinámica I', credits: 4, prereqs: ['CIV-2010', 'MAT-3600', 'QUI-1110'] },
+    { id: 'IEM-3670', name: 'Lab Termodinámica I', credits: 1, prereqs: ['CIV-2010', 'MAT-3600', 'QUI-1110'] },
+    { id: 'PSI-1340', name: 'Psicología Industrial', credits: 3, prereqs: [] },
+    // Semestre 7
+    { id: 'IEM-3260', name: 'Mecánica de Fluidos I', credits: 4, prereqs: ['CIV-2020', 'MAT-3600', 'IEM-3650'] },
+    { id: 'IEM-3320', name: 'Procesos de Manufactura I', credits: 2, prereqs: ['IEM-3310', 'IEM-3470', 'IEM-3490'] },
+    { id: 'IEM-3350', name: 'Lab Metalurgia Física', credits: 1, prereqs: ['IEM-3310'] },
+    { id: 'IEM-3360', name: 'Laboratorio de Fundición', credits: 1, prereqs: ['IEM-3310'] },
+    { id: 'IEM-3430', name: 'Mecanismos', credits: 4, prereqs: ['IEM-3470', 'IEM-3490'] },
+    { id: 'IEM-3480', name: 'Mecánica de Materiales II', credits: 4, prereqs: ['IEM-3470'] },
+    { id: 'IEM-3660', name: 'Termodinámica II', credits: 4, prereqs: ['IEM-3650', 'IEM-3670'] },
+    { id: 'IEM-3680', name: 'Lab Termodinámica II', credits: 1, prereqs: ['IEM-3650', 'IEM-3670'] },
+    { id: 'IEM-4270', name: 'Metalurgia Física I', credits: 3, prereqs: ['IEM-3310'] },
+    { id: 'IEM-4330', name: 'Laboratorio de Soldadura', credits: 1, prereqs: ['IEM-3310'] },
+    // Semestre 8
+    { id: 'IEM-3620', name: 'Transferencia de Calor', credits: 3, prereqs: ['IEM-3660', 'IEM-3680'] },
+    { id: 'IEM-3690', name: 'Lab Transf de Calor', credits: 1, prereqs: ['IEM-3660', 'IEM-3680'] },
+    { id: 'IEM-4080', name: 'Téc. Programación Aplic', credits: 3, prereqs: ['INF-1010', 'MAT-3710'] },
+    { id: 'IEM-4220', name: 'Diseño de Máquinas I', credits: 5, prereqs: ['IEM-3430', 'IEM-3480', 'IEM-3320'] },
+    { id: 'IEM-4240', name: 'Mecánica de Fluidos II', credits: 4, prereqs: ['IEM-3260'] },
+    { id: 'IEM-4250', name: 'Lab Mecánica de Fluidos', credits: 1, prereqs: ['IEM-3260'] },
+    { id: 'IEM-4280', name: 'Metalurgia Física II', credits: 3, prereqs: ['IEM-4270'] },
+    { id: 'IEM-4340', name: 'Procesos de Manufactura II', credits: 2, prereqs: ['IEM-3320'] },
+    { id: 'IEM-4360', name: 'Lab Máquinas-Herramientas', credits: 2, prereqs: ['IEM-3320'] },
+    { id: 'INQ-4610', name: 'Ingeniería Económica', credits: 3, prereqs: ['ECN-1100', 'MAT-3600'] },
+    // Semestre 9
+    { id: 'ADM-1120', name: 'Principios Administración', credits: 3, prereqs: [] },
+    { id: 'IEM-4160', name: 'Máquinas Eléctricas', credits: 3, prereqs: ['IEM-2020'] },
+    { id: 'IEM-4170', name: 'Lab Máquinas Eléctricas', credits: 1, prereqs: ['IEM-2020'] },
+    { id: 'IEM-4530', name: 'Servomec y Controles', credits: 3, prereqs: ['IEM-2050'] },
+    { id: 'IEM-5230', name: 'Diseño de Máquinas II', credits: 5, prereqs: ['IEM-4220'] },
+    { id: 'IEM-5680', name: 'Plantas de Vapor', credits: 5, prereqs: ['IEM-3660', 'IEM-4240'] },
+    // Semestre 10
+    { id: 'DER-1190', name: 'Legislación y Ética Prof', credits: 2, prereqs: [] },
+    { id: 'IEM-4410', name: 'Vibraciones Mecánicas', credits: 3, prereqs: ['IEM-3480', 'MAT-3710', 'IEM-5230'] },
+    { id: 'IEM-5420', name: 'Diseño Instalaciones Mec', credits: 3, prereqs: ['IEM-5230', 'IEM-3430'] },
+    { id: 'IEM-5720', name: 'Producción Industrial', credits: 3, prereqs: ['ADM-1120', 'INQ-4610', 'IEM-4530'] },
+    { id: 'IEM-OPT',  name: 'Optativas (6 Créditos)', credits: 6, prereqs: [] },
+    { id: 'IEM-7300', name: 'Tesis de Grado', credits: 8, prereqs: ['IEM-5230', 'IEM-5680', 'IEM-5720'] }
 ];
 
 // --- LISTA DE LOGROS ---
