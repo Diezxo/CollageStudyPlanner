@@ -1,31 +1,24 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2 } from 'lucide-react';
+import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE GEMINI API ---
-const apiKey = import.meta.env.VITE_GEMINI_API;
+ const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
-// Función mejorada para soportar Texto e Imágenes/PDFs (Multimodal)
+// Función auxiliar para llamar a Gemini
 async function callGemini(prompt, fileData = null) {
     try {
         const parts = [{ text: prompt }];
-
-        // Si hay archivo (PDF/Imagen), lo agregamos al payload
         if (fileData) {
-            parts.push({
-                inlineData: {
-                    mimeType: fileData.mimeType,
-                    data: fileData.base64
-                }
-            });
+            parts.push({ inlineData: { mimeType: fileData.mimeType, data: fileData.base64 } });
         }
-
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts }] })
         });
-
         if (!response.ok) throw new Error(`Error: ${response.status}`);
         const data = await response.json();
         return data.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
@@ -35,7 +28,7 @@ async function callGemini(prompt, fileData = null) {
     }
 }
 
-// --- BASE DE DATOS POR DEFECTO (ING. MECÁNICA) ---
+// --- DATOS POR DEFECTO (ING. MECÁNICA) ---
 const DEFAULT_SUBJECTS_DATA = [
     // Semestre 1
     { id: 'DOP-1000', name: 'Orientación Institucional', credits: 1, prereqs: [] },
@@ -125,144 +118,67 @@ const DEFAULT_SUBJECTS_DATA = [
     { id: 'IEM-7300', name: 'Tesis de Grado', credits: 8, prereqs: ['IEM-5230', 'IEM-5680', 'IEM-5720'] }
 ];
 
+// --- LISTA DE LOGROS (GAMIFICACIÓN) ---
+const ACHIEVEMENTS_LIST = [
+    { id: 'novato', name: 'Primeros Pasos', desc: 'Completa tu primera materia', icon: '🌱', condition: (completed) => completed.size >= 1 },
+    { id: 'semestre1', name: 'Sobreviviente', desc: 'Completa 5 materias', icon: '🛡️', condition: (completed) => completed.size >= 5 },
+    { id: 'calculo', name: 'Mente Matemática', desc: 'Aprueba Cálculo I y II', icon: '🧮', condition: (completed) => completed.has('MAT-2510') && completed.has('MAT-3500') },
+    { id: 'fisico', name: 'Físico Puro', desc: 'Aprueba Física I, II y III', icon: '⚛️', condition: (completed) => completed.has('FIS-2110') && completed.has('FIS-2120') && completed.has('FIS-2150') },
+    { id: 'termo', name: 'Terminator', desc: 'Domina Termodinámica I y II', icon: '🔥', condition: (completed) => completed.has('IEM-3650') && completed.has('IEM-3660') },
+    { id: 'ecuador', name: 'Medio Camino', desc: 'Completa el 50% de la carrera', icon: '🚩', condition: (completed, total) => completed.size >= total / 2 },
+    { id: 'tesis', name: 'Casi Ingeniero', desc: 'Desbloquea la Tesis', icon: '🎓', condition: (completed) => completed.has('IEM-5230') && completed.has('IEM-5680') }
+];
+
+// --- SISTEMA DE CALIFICACIONES ---
+const GRADE_POINTS = { 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
+
 const App = () => {
-    // --- ESTADOS CON PERSISTENCIA (LOCAL STORAGE) ---
-    const [subjectsData, setSubjectsData] = useState(() => {
-        const saved = localStorage.getItem('ingsys_subjects_data');
-        return saved ? JSON.parse(saved) : DEFAULT_SUBJECTS_DATA;
-    });
+    // Estados Persistentes
+    const [subjectsData, setSubjectsData] = useState(() => JSON.parse(localStorage.getItem('ingsys_subjects_data')) || DEFAULT_SUBJECTS_DATA);
+    const [completed, setCompleted] = useState(() => new Set(JSON.parse(localStorage.getItem('ingsys_completed')) || []));
+    const [grades, setGrades] = useState(() => JSON.parse(localStorage.getItem('ingsys_grades')) || {}); // Nuevo: Calificaciones
+    const [careerName, setCareerName] = useState(() => localStorage.getItem('ingsys_career_name') || "Ingeniería Mecánica");
 
-    const [completed, setCompleted] = useState(() => {
-        const saved = localStorage.getItem('ingsys_completed');
-        return saved ? new Set(JSON.parse(saved)) : new Set();
-    });
+    // Efectos de Guardado
+    useEffect(() => localStorage.setItem('ingsys_subjects_data', JSON.stringify(subjectsData)), [subjectsData]);
+    useEffect(() => localStorage.setItem('ingsys_completed', JSON.stringify([...completed])), [completed]);
+    useEffect(() => localStorage.setItem('ingsys_grades', JSON.stringify(grades)), [grades]);
+    useEffect(() => localStorage.setItem('ingsys_career_name', careerName), [careerName]);
 
-    const [careerName, setCareerName] = useState(() => {
-        return localStorage.getItem('ingsys_career_name') || "Ingeniería Mecánica";
-    });
-
-    // --- EFFECTOS DE GUARDADO AUTOMÁTICO ---
-    useEffect(() => {
-        localStorage.setItem('ingsys_subjects_data', JSON.stringify(subjectsData));
-    }, [subjectsData]);
-
-    useEffect(() => {
-        localStorage.setItem('ingsys_completed', JSON.stringify([...completed]));
-    }, [completed]);
-
-    useEffect(() => {
-        localStorage.setItem('ingsys_career_name', careerName);
-    }, [careerName]);
-
-    // --- ESTADOS DE UI ---
-    const [subjectsPerSemester, setSubjectsPerSemester] = useState(6);
+    // Estados UI
     const [activeTab, setActiveTab] = useState('available');
-    const [suggestedSchedule, setSuggestedSchedule] = useState(null);
-
-    // Estados para IA y UI
-    const [careerAdvice, setCareerAdvice] = useState(null);
-    const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
-    const [showCareerModal, setShowCareerModal] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
-    const [isParsingPdf, setIsParsingPdf] = useState(false);
-    const [parsingError, setParsingError] = useState(null);
+    const [showCareerModal, setShowCareerModal] = useState(false);
+    const [showGradeModal, setShowGradeModal] = useState(null); // ID de materia a calificar
+    const [showPlannerModal, setShowPlannerModal] = useState(false);
 
-    // --- IMPORTADOR DE PDF (NUEVO) ---
-    const fileInputRef = useRef(null);
+    // Estados IA
+    const [careerAdvice, setCareerAdvice] = useState(null);
+    const [studyPlan, setStudyPlan] = useState(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        setIsParsingPdf(true);
-        setParsingError(null);
-
-        try {
-            // 1. Convertir archivo a Base64
-            const base64Data = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]); // Quitar prefijo data:application/pdf...
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-
-            // 2. Prompt para Gemini
-            const prompt = `
-        Analiza este documento PDF que contiene un Pensum o Plan de Estudios universitario.
-        Tu tarea es extraer TODAS las asignaturas y devolverlas estrictamente en formato JSON válido.
-        
-        El formato del JSON debe ser un array de objetos:
-        [
-          { 
-            "id": "CLAVE-101", 
-            "name": "Nombre Asignatura", 
-            "credits": 4, 
-            "prereqs": ["CLAVE-PREVIA1", "CLAVE-PREVIA2"] 
-          }
-        ]
-
-        Reglas Críticas:
-        1. "id": Debe ser la clave o código oficial (ej: MAT-0140). Si no hay clave, inventa una corta única.
-        2. "credits": Número entero.
-        3. "prereqs": Array de strings con los IDs de los prerrequisitos. Si dice "Bachiller" o nada, pon []. Si dice una materia, busca su ID.
-        4. Asegúrate de extraer TODAS las materias de todas las páginas.
-        5. NO incluyas texto markdown (\`\`\`json), solo el array crudo.
-        6. Si el documento tiene el nombre de la carrera, extráelo también, pero el output principal debe ser el array. Pon el nombre de la carrera en el primer objeto con una propiedad especial "careerName" si es posible, o simplemente enfócate en las materias.
-      `;
-
-            // 3. Llamar a Gemini con el PDF
-            const resultText = await callGemini(prompt, { mimeType: file.type, base64: base64Data });
-
-            // 4. Limpiar y Parsear JSON
-            const cleanJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsedData = JSON.parse(cleanJson);
-
-            if (!Array.isArray(parsedData) || parsedData.length === 0) {
-                throw new Error("La IA no pudo encontrar materias en el formato correcto.");
+    // --- LÓGICA DE GPA ---
+    const calculateGPA = useMemo(() => {
+        let totalPoints = 0;
+        let totalCredits = 0;
+        Object.entries(grades).forEach(([id, grade]) => {
+            const subject = subjectsData.find(s => s.id === id);
+            if (subject && GRADE_POINTS[grade] !== undefined) {
+                totalPoints += GRADE_POINTS[grade] * subject.credits;
+                totalCredits += subject.credits;
             }
+        });
+        return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : "0.00";
+    }, [grades, subjectsData]);
 
-            // 5. Actualizar Estado y Guardar
-            setSubjectsData(parsedData);
-            setCompleted(new Set()); // Resetear progreso al cambiar de carrera
-            setCareerName("Carrera Importada (Personalizada)");
-            setShowSettings(false);
-            alert(`¡Éxito! Se importaron ${parsedData.length} asignaturas.`);
-
-        } catch (error) {
-            console.error(error);
-            setParsingError("Error al procesar el PDF. Asegúrate de que sea legible o intenta de nuevo.");
-        } finally {
-            setIsParsingPdf(false);
-        }
-    };
-
-    const handleResetDefault = () => {
-        if (confirm("¿Seguro que quieres borrar el pensum importado y volver a Ingeniería Mecánica?")) {
-            setSubjectsData(DEFAULT_SUBJECTS_DATA);
-            setCompleted(new Set());
-            setCareerName("Ingeniería Mecánica");
-            localStorage.removeItem('ingsys_subjects_data');
-            setShowSettings(false);
-        }
-    };
-
-    const handleClearProgress = () => {
-        if (confirm("¿Borrar todo tu progreso (materias completadas)?")) {
-            setCompleted(new Set());
-            setShowSettings(false);
-        }
-    };
-
-    // --- CÁLCULO DE PESO (Ruta Crítica) ---
+    // --- LÓGICA DE PROGRESO Y DEPENDENCIAS ---
     const getDependencyWeight = useMemo(() => {
         const memo = {};
         const calculateWeight = (id) => {
             if (memo[id] !== undefined) return memo[id];
             const directDependents = subjectsData.filter(s => s.prereqs.includes(id));
             let weight = directDependents.length;
-            directDependents.forEach(dep => {
-                weight += calculateWeight(dep.id);
-            });
+            directDependents.forEach(dep => weight += calculateWeight(dep.id));
             memo[id] = weight;
             return weight;
         };
@@ -270,14 +186,6 @@ const App = () => {
         subjectsData.forEach(s => weights[s.id] = calculateWeight(s.id));
         return weights;
     }, [subjectsData]);
-
-    const toggleSubject = (id) => {
-        const newCompleted = new Set(completed);
-        if (newCompleted.has(id)) newCompleted.delete(id);
-        else newCompleted.add(id);
-        setCompleted(newCompleted);
-        setSuggestedSchedule(null);
-    };
 
     const subjectsStatus = useMemo(() => {
         return subjectsData.map(subject => {
@@ -287,410 +195,327 @@ const App = () => {
             const isAvailable = !isCompleted && !isLocked;
             const weight = getDependencyWeight[subject.id] || 0;
             const isHighPriority = isAvailable && (weight > 4 || subject.credits >= 5);
-            return { ...subject, isCompleted, isLocked, isAvailable, missingPrereqs, weight, isHighPriority };
+            const grade = grades[subject.id];
+            return { ...subject, isCompleted, isLocked, isAvailable, missingPrereqs, weight, isHighPriority, grade };
         });
-    }, [completed, getDependencyWeight, subjectsData]);
+    }, [completed, getDependencyWeight, subjectsData, grades]);
 
-    const generateSchedule = () => {
-        const available = subjectsStatus.filter(s => s.isAvailable);
-        const sorted = [...available].sort((a, b) => b.weight - a.weight || b.credits - a.credits);
-        const suggested = sorted.slice(0, subjectsPerSemester);
-        setSuggestedSchedule(suggested);
-        setActiveTab('available');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const totalCredits = subjectsData.reduce((acc, s) => acc + s.credits, 0);
-    const earnedCredits = subjectsStatus.filter(s => s.isCompleted).reduce((acc, s) => acc + s.credits, 0);
-    const remainingSubjectsCount = subjectsStatus.filter(s => !s.isCompleted).length;
-    const estimatedSemesters = remainingSubjectsCount > 0 ? Math.ceil(remainingSubjectsCount / subjectsPerSemester) : 0;
-    const progressPercentage = totalCredits > 0 ? Math.round((earnedCredits / totalCredits) * 100) : 0;
-
+    // Listas filtradas
     const availableList = subjectsStatus.filter(s => s.isAvailable);
     const lockedList = subjectsStatus.filter(s => s.isLocked);
     const completedList = subjectsStatus.filter(s => s.isCompleted);
 
+    // Manejo de Toggle con Calificación
+    const handleToggleAttempt = (id) => {
+        if (completed.has(id)) {
+            // Si ya está completada, la quitamos (y su nota)
+            const newCompleted = new Set(completed);
+            newCompleted.delete(id);
+            setCompleted(newCompleted);
+            const newGrades = { ...grades };
+            delete newGrades[id];
+            setGrades(newGrades);
+        } else {
+            // Si no está completada, abrimos modal para pedir nota
+            setShowGradeModal(id);
+        }
+    };
+
+    const confirmGrade = (id, grade) => {
+        const newCompleted = new Set(completed);
+        newCompleted.add(id);
+        setCompleted(newCompleted);
+        setGrades({ ...grades, [id]: grade });
+        setShowGradeModal(null);
+    };
+
+    // --- IA FUNCTIONS ---
     const handleCareerAdvice = async () => {
         setShowCareerModal(true);
         if (careerAdvice) return;
-        setIsGeneratingAdvice(true);
+        setIsGenerating(true);
         const completedNames = completedList.map(s => s.name).join(", ");
-        const promptContext = completedNames.length > 0 ? `He completado: ${completedNames}.` : "Acabo de comenzar.";
-        const prompt = `Soy estudiante de ${careerName}. ${promptContext}. Sugiere 3 roles profesionales y habilidades a desarrollar. Sé breve y usa emojis.`;
+        const prompt = `Soy estudiante de ${careerName}. He completado: ${completedNames || "Nada aun"}. Sugiere 3 roles profesionales y habilidades a desarrollar. Sé breve y motivador.`;
         const result = await callGemini(prompt);
         setCareerAdvice(result);
-        setIsGeneratingAdvice(false);
+        setIsGenerating(false);
     };
 
-    return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans relative pb-20 md:pb-0">
+    const handleStudyPlan = async (hoursPerDay) => {
+        setIsGenerating(true);
+        // Tomamos las top 5 materias disponibles prioritarias
+        const subjectsToStudy = availableList
+            .sort((a, b) => b.weight - a.weight)
+            .slice(0, 5)
+            .map(s => s.name)
+            .join(", ");
 
-            {/* --- HEADER RESPONSIVE --- */}
-            <div className="bg-blue-900 text-white shadow-lg sticky top-0 z-30 transition-all">
+        const prompt = `Soy estudiante de ingeniería. Tengo ${hoursPerDay} horas al día para estudiar. Mis materias prioritarias actuales son: ${subjectsToStudy}. 
+    Crea una rutina de estudio semanal (Lunes a Domingo) optimizada. Incluye descansos. Formato Markdown simple.`;
+
+        const result = await callGemini(prompt);
+        setStudyPlan(result);
+        setIsGenerating(false);
+    };
+
+    // --- LOGROS DESBLOQUEADOS ---
+    const unlockedAchievements = ACHIEVEMENTS_LIST.filter(ach => ach.condition(completed, subjectsData.length));
+
+    return (
+        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 md:pb-0">
+
+            {/* HEADER */}
+            <div className="bg-blue-900 text-white shadow-lg sticky top-0 z-30">
                 <div className="max-w-5xl mx-auto p-4 md:p-6">
                     <div className="flex justify-between items-center mb-4">
-                        <div className="flex flex-col">
+                        <div>
                             <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-                                <GraduationCap className="h-6 w-6 md:h-8 md:w-8 text-yellow-400" />
-                                Ingeniero Pro
+                                <GraduationCap className="text-yellow-400" /> Ingeniero Pro
                             </h1>
-                            <p className="text-blue-200 text-xs md:text-sm truncate max-w-[200px] md:max-w-none">{careerName}</p>
+                            <p className="text-blue-200 text-xs">{careerName}</p>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setShowSettings(true)}
-                                className="bg-blue-800 p-2 rounded-lg hover:bg-blue-700 transition-colors"
-                                title="Configuración e Importación"
-                            >
-                                <Settings className="w-5 h-5 text-blue-200" />
-                            </button>
-
-                            <button
-                                onClick={handleCareerAdvice}
-                                className="hidden md:flex bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow items-center gap-2 transition-all active:scale-95"
-                            >
-                                <Sparkles className="w-4 h-4 text-yellow-300" /> Coach IA
-                            </button>
-
-                            <div className="bg-blue-800 rounded px-3 py-1.5 text-right border border-blue-700 shadow-inner min-w-[60px]">
-                                <div className="text-lg md:text-xl font-bold leading-none">{remainingSubjectsCount}</div>
-                                <div className="text-[9px] md:text-[10px] text-blue-300 uppercase tracking-wide">Faltan</div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowSettings(true)} className="p-2 bg-blue-800 rounded-lg"><Settings size={20}/></button>
+                            <div className="bg-blue-800 px-3 py-1 rounded-lg text-right border border-blue-700">
+                                <div className="text-xs text-blue-300">Índice (GPA)</div>
+                                <div className={`font-bold text-lg ${parseFloat(calculateGPA) >= 3 ? 'text-green-400' : 'text-yellow-400'}`}>{calculateGPA}</div>
                             </div>
-
-                            {/* Mobile IA Button */}
-                            <button
-                                onClick={handleCareerAdvice}
-                                className="md:hidden bg-purple-600 text-white p-2 rounded-lg shadow-lg active:bg-purple-700"
-                            >
-                                <Sparkles className="w-5 h-5 text-yellow-300" />
-                            </button>
                         </div>
                     </div>
 
-                    {/* Progress Bar Compacta */}
+                    {/* Barra de Progreso */}
                     <div className="mb-4">
-                        <div className="flex justify-between text-[10px] md:text-xs mb-1 text-blue-200 font-medium">
-                            <span>{earnedCredits} / {totalCredits} Créditos</span>
-                            <span>{progressPercentage}%</span>
+                        <div className="flex justify-between text-xs mb-1 text-blue-200">
+                            <span>{completedList.length} / {subjectsData.length} Materias</span>
+                            <span>{Math.round((completedList.length / subjectsData.length) * 100)}%</span>
                         </div>
-                        <div className="w-full bg-blue-950 rounded-full h-2 overflow-hidden shadow-inner">
-                            <div className="bg-yellow-400 h-2 rounded-full transition-all duration-500 ease-out" style={{ width: `${progressPercentage}%` }}></div>
+                        <div className="w-full bg-blue-950 rounded-full h-2 overflow-hidden">
+                            <div className="bg-yellow-400 h-2 rounded-full transition-all duration-500" style={{ width: `${(completedList.length / subjectsData.length) * 100}%` }}></div>
                         </div>
                     </div>
 
-                    {/* Controls Bar Responsive */}
-                    <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center bg-blue-800/60 p-3 rounded-lg border border-blue-700/50 backdrop-blur-sm">
-                        <div className="flex justify-between md:justify-start items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Calendar className="h-4 w-4 text-blue-300" />
-                                <span className="text-sm font-bold">{estimatedSemesters} Sem. Restantes</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-blue-900/50 px-2 py-1 rounded">
-                                <span className="text-xs text-blue-300">Mat/Sem:</span>
-                                <select
-                                    value={subjectsPerSemester}
-                                    onChange={(e) => setSubjectsPerSemester(Number(e.target.value))}
-                                    className="bg-transparent text-white text-sm font-bold focus:outline-none appearance-none cursor-pointer"
-                                >
-                                    {[3,4,5,6,7,8].map(n => <option key={n} value={n} className="text-slate-900">{n}</option>)}
-                                </select>
-                                <ChevronDown size={12} className="text-blue-300" />
-                            </div>
-                        </div>
-                        <div className="flex-grow"></div>
-                        <button
-                            onClick={generateSchedule}
-                            className="w-full md:w-auto bg-green-500 hover:bg-green-400 text-blue-900 font-bold px-4 py-3 md:py-1.5 rounded-lg shadow-lg flex justify-center items-center gap-2 text-sm transition-transform active:scale-95"
-                        >
-                            <RefreshCw className="w-4 h-4" />
-                            Armar Horario
+                    {/* Botones de Acción */}
+                    <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                        <button onClick={() => setShowPlannerModal(true)} className="bg-indigo-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform">
+                            <Calendar size={16} /> Planificador IA
+                        </button>
+                        <button onClick={handleCareerAdvice} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform">
+                            <Sparkles size={16} /> Coach Carrera
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto p-4 md:p-6 pb-24 md:pb-12">
+            <div className="max-w-5xl mx-auto p-4 md:p-6">
 
-                {/* --- TABS SCROLLABLE --- */}
-                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 snap-x hide-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                {/* TABS */}
+                <div className="flex gap-2 mb-6 overflow-x-auto pb-2 hide-scrollbar">
                     <TabButton active={activeTab === 'available'} onClick={() => setActiveTab('available')} icon={Unlock} label={`Disponibles (${availableList.length})`} color="green" />
-                    <TabButton active={activeTab === 'locked'} onClick={() => setActiveTab('locked')} icon={Lock} label={`Bloqueadas (${lockedList.length})`} color="slate" />
-                    <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} icon={CheckCircle} label={`Listas (${completedList.length})`} color="blue" />
+                    <TabButton active={activeTab === 'locked'} onClick={() => setActiveTab('locked')} icon={Lock} label="Bloqueadas" color="slate" />
+                    <TabButton active={activeTab === 'completed'} onClick={() => setActiveTab('completed')} icon={CheckCircle} label="Historial" color="blue" />
+                    <TabButton active={activeTab === 'achievements'} onClick={() => setActiveTab('achievements')} icon={Trophy} label="Logros" color="yellow" />
                 </div>
 
-                {/* Content */}
-                <div className="space-y-4 min-h-[50vh]">
+                {/* CONTENIDO */}
+                <div className="min-h-[50vh]">
                     {activeTab === 'available' && (
-                        <div className="animate-fade-in">
-                            {suggestedSchedule && (
-                                <div className="mb-6 bg-green-50/90 backdrop-blur border border-green-200 p-4 rounded-xl relative overflow-hidden shadow-sm">
-                                    <div className="flex justify-between items-start mb-3 relative z-10">
-                                        <div>
-                                            <h2 className="text-lg font-bold text-green-800 flex items-center gap-2">
-                                                <span className="bg-green-600 text-white p-1 rounded-full"><CheckCircle size={14}/></span>
-                                                Horario Sugerido
-                                            </h2>
-                                            <p className="text-xs text-green-700 mt-1">Sugerencia óptima para avanzar rápido.</p>
-                                        </div>
-                                        <button onClick={() => setSuggestedSchedule(null)} className="p-2 -mr-2 text-green-600 hover:bg-green-100 rounded-full"><X size={16}/></button>
-                                    </div>
-                                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 relative z-10">
-                                        {suggestedSchedule.map(s => (
-                                            <div key={s.id} className="bg-white p-3 rounded-lg border border-green-100 shadow-sm flex items-center justify-between">
-                                                <span className="font-semibold text-sm text-slate-700 truncate w-3/4">{s.name}</span>
-                                                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-mono">{s.credits}cr</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* High Priority Section */}
+                        <div className="animate-in fade-in slide-in-from-bottom-4">
                             {availableList.some(s => s.isHighPriority) && (
                                 <div className="mb-6">
                                     <h3 className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                        <Flame className="w-4 h-4" /> Prioridad Crítica
+                                        <Flame size={14} /> Prioridad Crítica
                                     </h3>
                                     <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                                        {availableList.filter(s => s.isHighPriority).map(subject => (
-                                            <SubjectCard key={subject.id} subject={subject} onToggle={() => toggleSubject(subject.id)} careerName={careerName} />
+                                        {availableList.filter(s => s.isHighPriority).map(s => (
+                                            <SubjectCard key={s.id} subject={s} onToggle={() => handleToggleAttempt(s.id)} careerName={careerName} />
                                         ))}
                                     </div>
                                 </div>
                             )}
-
-                            {/* Normal Priority */}
-                            {availableList.some(s => !s.isHighPriority) && (
-                                <div>
-                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                        <Clock className="w-4 h-4" /> Flexible
-                                    </h3>
-                                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                                        {availableList.filter(s => !s.isHighPriority).map(subject => (
-                                            <SubjectCard key={subject.id} subject={subject} onToggle={() => toggleSubject(subject.id)} careerName={careerName} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <Clock size={14} /> Materias Flexibles
+                            </h3>
+                            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                                {availableList.filter(s => !s.isHighPriority).map(s => (
+                                    <SubjectCard key={s.id} subject={s} onToggle={() => handleToggleAttempt(s.id)} careerName={careerName} />
+                                ))}
+                            </div>
                         </div>
                     )}
 
                     {activeTab === 'locked' && (
                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                            {lockedList.map(subject => (
-                                <SubjectCard key={subject.id} subject={subject} onToggle={() => toggleSubject(subject.id)} careerName={careerName} />
-                            ))}
+                            {lockedList.map(s => <SubjectCard key={s.id} subject={s} onToggle={() => handleToggleAttempt(s.id)} careerName={careerName} />)}
                         </div>
                     )}
 
                     {activeTab === 'completed' && (
                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                            {completedList.map(subject => (
-                                <SubjectCard key={subject.id} subject={subject} onToggle={() => toggleSubject(subject.id)} careerName={careerName} />
-                            ))}
+                            {completedList.map(s => <SubjectCard key={s.id} subject={s} onToggle={() => handleToggleAttempt(s.id)} careerName={careerName} />)}
+                        </div>
+                    )}
+
+                    {activeTab === 'achievements' && (
+                        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                            {ACHIEVEMENTS_LIST.map(ach => {
+                                const unlocked = unlockedAchievements.some(u => u.id === ach.id);
+                                return (
+                                    <div key={ach.id} className={`p-4 rounded-xl border flex items-center gap-4 ${unlocked ? 'bg-yellow-50 border-yellow-200' : 'bg-slate-100 border-slate-200 opacity-60 grayscale'}`}>
+                                        <div className="text-3xl">{ach.icon}</div>
+                                        <div>
+                                            <h4 className={`font-bold ${unlocked ? 'text-yellow-800' : 'text-slate-500'}`}>{ach.name}</h4>
+                                            <p className="text-xs text-slate-600">{ach.desc}</p>
+                                        </div>
+                                        {unlocked && <CheckCircle className="ml-auto text-yellow-500" size={20} />}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* --- MODAL DE CONFIGURACIÓN / IMPORTAR --- */}
-            {showSettings && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-                        <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                <Settings className="w-5 h-5 text-slate-500" /> Configuración
-                            </h3>
-                            <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+            {/* --- MODALES --- */}
+
+            {/* Modal Calificación */}
+            {showGradeModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95">
+                        <h3 className="text-lg font-bold mb-4 text-center">¿Qué nota obtuviste?</h3>
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            {Object.keys(GRADE_POINTS).map(grade => (
+                                <button
+                                    key={grade}
+                                    onClick={() => confirmGrade(showGradeModal, grade)}
+                                    className="p-3 rounded-lg border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 font-bold text-xl transition-all"
+                                >
+                                    {grade}
+                                </button>
+                            ))}
                         </div>
+                        <button onClick={() => setShowGradeModal(null)} className="w-full py-2 text-slate-500 hover:text-slate-800">Cancelar</button>
+                    </div>
+                </div>
+            )}
 
-                        <div className="p-6 space-y-6">
-
-                            {/* Sección Importar PDF */}
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-blue-500" /> Importar Nuevo Pensum (PDF)
-                                </h4>
-                                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center relative group">
-                                    {isParsingPdf ? (
-                                        <div className="flex flex-col items-center gap-3 py-4">
-                                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                                            <p className="text-xs text-blue-600 font-semibold animate-pulse">Analizando PDF con IA...</p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <Upload className="w-8 h-8 text-blue-300 mx-auto mb-2 group-hover:text-blue-500 transition-colors" />
-                                            <p className="text-xs text-slate-500 mb-2">Sube el PDF de tu carrera. La IA detectará las materias.</p>
-                                            <input
-                                                type="file"
-                                                accept=".pdf"
-                                                ref={fileInputRef}
-                                                onChange={handleFileUpload}
-                                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                            />
-                                            <button className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold pointer-events-none">
-                                                Seleccionar Archivo
+            {/* Modal Planificador */}
+            {showPlannerModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+                        <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold flex items-center gap-2"><Calendar className="text-indigo-600"/> Planificador IA</h3>
+                            <button onClick={() => setShowPlannerModal(false)}><X className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {!studyPlan ? (
+                                <div className="text-center space-y-4">
+                                    <p className="text-slate-600">¿Cuántas horas al día puedes dedicar a estudiar?</p>
+                                    <div className="flex justify-center gap-2">
+                                        {[1, 2, 3, 4, 6].map(h => (
+                                            <button key={h} onClick={() => handleStudyPlan(h)} className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-bold hover:bg-indigo-200">
+                                                {h}h
                                             </button>
-                                        </>
-                                    )}
-                                </div>
-                                {parsingError && <p className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100">{parsingError}</p>}
-                            </div>
-
-                            <div className="h-px bg-slate-100 my-2"></div>
-
-                            {/* Sección Acciones Peligrosas */}
-                            <div className="space-y-3">
-                                <button
-                                    onClick={handleResetDefault}
-                                    className="w-full flex items-center justify-between p-3 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium"
-                                >
-                                    <span>Restaurar Ing. Mecánica</span>
-                                    <RefreshCw className="w-4 h-4" />
-                                </button>
-
-                                <button
-                                    onClick={handleClearProgress}
-                                    className="w-full flex items-center justify-between p-3 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-sm font-medium"
-                                >
-                                    <span>Borrar Progreso Actual</span>
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-3 text-center text-[10px] text-slate-400">
-                            Tus datos se guardan automáticamente en este dispositivo.
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* --- MODAL CAREER --- */}
-            {showCareerModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center md:p-4 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white md:rounded-2xl shadow-2xl w-full h-full md:h-auto md:max-w-lg md:max-h-[85vh] flex flex-col overflow-hidden">
-                        <div className="p-4 md:p-6 border-b flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg md:text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <BrainCircuit className="text-purple-600 w-6 h-6" /> Orientación IA
-                            </h3>
-                            <button onClick={() => setShowCareerModal(false)} className="p-2 hover:bg-slate-200 rounded-full"><X size={24} className="text-slate-500" /></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white">
-                            <div className="prose prose-sm prose-slate max-w-none">
-                                {isGeneratingAdvice ? (
-                                    <div className="py-12 text-center flex flex-col items-center gap-3">
-                                        <Loader2 className="w-10 h-10 text-purple-600 animate-spin" />
-                                        <p className="text-slate-500 font-medium">Analizando perfil...</p>
+                                        ))}
                                     </div>
-                                ) : (
-                                    <div className="whitespace-pre-wrap leading-relaxed text-slate-700">{careerAdvice || "Error al cargar."}</div>
-                                )}
+                                    {isGenerating && <div className="flex items-center justify-center gap-2 text-indigo-600 mt-4"><Loader2 className="animate-spin"/> Creando rutina...</div>}
+                                </div>
+                            ) : (
+                                <div className="prose prose-sm prose-slate max-w-none whitespace-pre-wrap">{studyPlan}</div>
+                            )}
+                        </div>
+                        {studyPlan && (
+                            <div className="p-4 border-t bg-slate-50 text-right">
+                                <button onClick={() => setStudyPlan(null)} className="text-indigo-600 font-bold mr-4">Reintentar</button>
+                                <button onClick={() => setShowPlannerModal(false)} className="bg-slate-900 text-white px-4 py-2 rounded-lg">Cerrar</button>
                             </div>
-                        </div>
-                        <div className="p-4 border-t bg-slate-50 flex justify-end">
-                            <button onClick={() => setShowCareerModal(false)} className="w-full md:w-auto bg-slate-900 text-white px-6 py-3 rounded-xl font-bold">Entendido</button>
-                        </div>
+                        )}
                     </div>
                 </div>
             )}
+
+            {/* Modal Configuración (Simplificado para el ejemplo) */}
+            {showSettings && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+                        <h3 className="font-bold mb-4">Configuración</h3>
+                        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-100 text-red-600 py-2 rounded-lg font-bold mb-2">Borrar Todo</button>
+                        <button onClick={() => setShowSettings(false)} className="w-full bg-slate-100 py-2 rounded-lg">Cerrar</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Carrera IA (Reutilizado) */}
+            {showCareerModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold flex gap-2"><Sparkles className="text-purple-600"/> Orientación</h3>
+                            <button onClick={() => setShowCareerModal(false)}><X/></button>
+                        </div>
+                        {isGenerating ? <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-purple-600"/></div> : <div className="whitespace-pre-wrap">{careerAdvice}</div>}
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
 
-// --- COMPONENTES UI AUXILIARES ---
-
+// Componentes UI
 const TabButton = ({ active, onClick, icon: Icon, label, color }) => (
-    <button
-        onClick={onClick}
-        className={`snap-center flex-none py-3 px-5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all whitespace-nowrap border shadow-sm
-      ${active
-            ? `bg-${color}-600 text-white border-${color}-600 shadow-${color}-200 scale-105`
-            : `bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:border-slate-300`}`}
-    >
-        <Icon className="h-4 w-4" /> {label}
+    <button onClick={onClick} className={`flex-none py-2 px-4 rounded-xl font-bold text-sm flex items-center gap-2 border transition-all ${active ? `bg-${color}-600 text-white border-${color}-600 shadow-md` : `bg-white text-slate-500 border-slate-200`}`}>
+        <Icon size={16} /> {label}
     </button>
 );
 
 const SubjectCard = ({ subject, onToggle, careerName }) => {
     const [expanded, setExpanded] = useState(false);
     const [aiTip, setAiTip] = useState(null);
-    const [loadingTip, setLoadingTip] = useState(false);
-    const [showAi, setShowAi] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleAiTip = async (e) => {
-        e.stopPropagation();
-        setShowAi(true); setExpanded(true);
-        if (aiTip) return;
-        setLoadingTip(true);
-        const tip = await callGemini(`Dame 3 tips ultra-breves para aprobar "${subject.name}" de la carrera ${careerName}. Usa emojis.`);
+    const getTip = async (e) => {
+        e.stopPropagation(); setExpanded(true);
+        if(aiTip) return;
+        setLoading(true);
+        const tip = await callGemini(`Dame 3 tips breves para aprobar ${subject.name} en ${careerName}. Usa emojis.`);
         setAiTip(tip);
-        setLoadingTip(false);
+        setLoading(false);
     };
 
     return (
-        <div className={`rounded-xl shadow-sm border transition-all duration-200 overflow-hidden relative group active:scale-[0.99] touch-manipulation
-      ${subject.isCompleted ? 'bg-blue-50 border-blue-200' :
-            subject.isHighPriority ? 'bg-white border-orange-300 ring-1 ring-orange-100 shadow-orange-100' :
-                subject.isLocked ? 'bg-slate-50 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-md'}`}>
+        <div className={`rounded-xl border p-3 bg-white relative group transition-all active:scale-[0.99] ${subject.isCompleted ? 'border-blue-200 bg-blue-50' : subject.isHighPriority ? 'border-orange-300 shadow-orange-100 ring-1 ring-orange-100' : 'border-slate-200'}`}>
+            {subject.isHighPriority && !subject.isCompleted && <div className="absolute top-0 right-0 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-bl-lg font-bold flex gap-1"><Flame size={10}/> CRÍTICA</div>}
 
-            {subject.isHighPriority && !subject.isCompleted && (
-                <div className="absolute top-0 right-0 bg-orange-100 text-orange-700 text-[10px] px-2 py-0.5 rounded-bl-lg font-bold flex items-center gap-1 z-10">
-                    <Flame size={10} /> CRÍTICA
-                </div>
-            )}
-
-            <div className="p-4 flex items-center gap-3" onClick={() => setExpanded(!expanded)}>
-                <button onClick={(e) => { e.stopPropagation(); onToggle(); }}
-                        className={`flex-shrink-0 w-10 h-10 md:w-8 md:h-8 rounded-full flex items-center justify-center border-2 transition-colors z-20
-          ${subject.isCompleted ? 'bg-blue-600 border-blue-600 text-white' :
-                            'bg-white border-slate-300 hover:border-blue-400 active:bg-blue-50'}`}>
-                    {subject.isCompleted && <CheckCircle size={20} className="md:w-4 md:h-4" />}
+            <div className="flex items-center gap-3" onClick={() => setExpanded(!expanded)}>
+                <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${subject.isCompleted ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
+                    {subject.isCompleted ? (subject.grade || <CheckCircle size={20} />) : null}
                 </button>
-
-                <div className="flex-grow min-w-0">
-                    <div className="font-bold text-sm md:text-base truncate text-slate-800 leading-tight">{subject.name}</div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                        <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">{subject.id}</span>
+                <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate">{subject.name}</div>
+                    <div className="text-xs text-slate-500 flex gap-2">
+                        <span className="bg-slate-100 px-1 rounded">{subject.id}</span>
                         <span>{subject.credits} CR</span>
-                        {subject.isLocked && <span className="text-red-500 flex items-center gap-0.5 font-medium"><Lock size={10}/></span>}
+                        {subject.isLocked && <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> Bloqueada</span>}
                     </div>
                 </div>
-
-                <button
-                    onClick={handleAiTip}
-                    className="p-3 md:p-2 -mr-2 text-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-full transition-colors z-20"
-                >
-                    <Lightbulb size={20} className="md:w-5 md:h-5" />
-                </button>
+                <button onClick={getTip} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-full"><Lightbulb size={20}/></button>
             </div>
 
             {expanded && (
-                <div className="px-4 py-3 bg-slate-50/80 text-sm border-t border-slate-100 animate-in slide-in-from-top-2">
-                    {showAi && (
-                        <div className="mb-3 bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
-                            <div className="font-bold text-indigo-700 mb-2 flex justify-between text-xs uppercase tracking-wide">
-                                <span>Tips IA</span>
-                                {loadingTip && <Loader2 className="w-3 h-3 animate-spin" />}
-                            </div>
-                            <div className="text-slate-600 whitespace-pre-wrap text-sm leading-relaxed">
-                                {loadingTip ? <div className="h-8 bg-slate-100 rounded animate-pulse"></div> : aiTip}
-                            </div>
+                <div className="mt-3 pt-3 border-t text-sm bg-slate-50/50 -mx-3 px-3 pb-2 animate-in slide-in-from-top-2">
+                    {aiTip || loading ? (
+                        <div className="bg-white p-2 rounded border border-indigo-100 mb-2">
+                            <div className="font-bold text-indigo-600 text-xs mb-1">TIPS GEMINI</div>
+                            {loading ? <Loader2 className="animate-spin w-4 h-4"/> : aiTip}
                         </div>
-                    )}
+                    ) : null}
                     {subject.prereqs.length > 0 ? (
-                        <div>
-                            <span className="font-semibold text-slate-600 text-xs uppercase tracking-wider">Prerrequisitos:</span>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {subject.prereqs.map(p => (
-                                    <span key={p} className="px-2 py-1 rounded text-xs font-medium border bg-slate-100 text-slate-600 border-slate-200">
-                     {p}
-                   </span>
-                                ))}
-                            </div>
+                        <div className="flex flex-wrap gap-1">
+                            <span className="text-xs font-bold text-slate-500 mr-1">REQ:</span>
+                            {subject.prereqs.map(p => <span key={p} className={`text-xs px-1 rounded border ${subject.missingPrereqs.includes(p) ? 'bg-red-50 border-red-100 text-red-600' : 'bg-green-50 border-green-100 text-green-600'}`}>{p}</span>)}
                         </div>
-                    ) : <span className="text-slate-400 italic text-xs">Sin prerrequisitos</span>}
+                    ) : <span className="text-xs text-slate-400 italic">Sin prerrequisitos</span>}
                 </div>
             )}
         </div>
