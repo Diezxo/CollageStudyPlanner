@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator, Building2, SkipForward } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE API ---
- const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+ const apiKey = import.meta.env.VITE_GEMINI_API;
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
 // Función auxiliar para llamar al servicio inteligente
