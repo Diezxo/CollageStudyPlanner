@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator } from 'lucide-react';
+import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator, Building2 } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE GEMINI API ---
- const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+// --- CONFIGURACIÓN DE API ---
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
-// Función auxiliar para llamar a Gemini
-async function callGemini(prompt, fileData = null) {
+// Función auxiliar para llamar al servicio inteligente
+async function callSmartService(prompt, fileData = null) {
     try {
         const parts = [{ text: prompt }];
         if (fileData) {
@@ -23,10 +23,60 @@ async function callGemini(prompt, fileData = null) {
         const data = await response.json();
         return data.candidates?.[0]?.content?.parts?.[0]?.text || "No se pudo generar respuesta.";
     } catch (error) {
-        console.error("Error llamando a Gemini:", error);
+        console.error("Error conectando con el servicio:", error);
         throw error;
     }
 }
+
+// --- SISTEMAS DE CALIFICACIÓN POR UNIVERSIDAD ---
+const UNIVERSITY_CONFIG = {
+    'UASD': {
+        name: 'UASD',
+        type: 'numeric', // 0-100
+        min: 0,
+        max: 100,
+        allowsAusente: true,
+        calculatePoints: (grade) => {
+            if (grade === 'AUS') return 0; // Ausente penaliza como 0
+            const n = parseFloat(grade);
+            if (isNaN(n)) return 0;
+            if (n >= 90) return 4;
+            if (n >= 80) return 3;
+            if (n >= 70) return 2;
+            if (n >= 60) return 1;
+            return 0;
+        },
+        getLabel: (grade) => grade === 'AUS' ? 'Ausente' : grade
+    },
+    'OYM': {
+        name: 'O&M',
+        type: 'numeric',
+        min: 0,
+        max: 100,
+        allowsAusente: true,
+        calculatePoints: (grade) => {
+            if (grade === 'AUS') return 0;
+            const n = parseFloat(grade);
+            if (isNaN(n)) return 0;
+            if (n >= 90) return 4;  // A
+            if (n >= 80) return 3;  // B
+            if (n >= 75) return 2;  // C (Escala especial O&M: 75-79)
+            if (n >= 70) return 1;  // D (Escala especial O&M: 70-74)
+            return 0;               // F (<70)
+        },
+        getLabel: (grade) => grade === 'AUS' ? 'Ausente' : grade
+    },
+    'PUCMM': {
+        name: 'PUCMM',
+        type: 'letter',
+        options: ['A', 'B', 'C', 'D', 'F'],
+        calculatePoints: (grade) => {
+            const map = { 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
+            return map[grade] || 0;
+        },
+        getLabel: (grade) => grade
+    }
+};
 
 // --- DATOS POR DEFECTO (ING. MECÁNICA) ---
 const DEFAULT_SUBJECTS_DATA = [
@@ -118,7 +168,7 @@ const DEFAULT_SUBJECTS_DATA = [
     { id: 'IEM-7300', name: 'Tesis de Grado', credits: 8, prereqs: ['IEM-5230', 'IEM-5680', 'IEM-5720'] }
 ];
 
-// --- LISTA DE LOGROS (GAMIFICACIÓN) ---
+// --- LISTA DE LOGROS ---
 const ACHIEVEMENTS_LIST = [
     { id: 'novato', name: 'Primeros Pasos', desc: 'Completa tu primera materia', icon: '🌱', condition: (completed) => completed.size >= 1 },
     { id: 'semestre1', name: 'Sobreviviente', desc: 'Completa 5 materias', icon: '🛡️', condition: (completed) => completed.size >= 5 },
@@ -129,21 +179,20 @@ const ACHIEVEMENTS_LIST = [
     { id: 'tesis', name: 'Casi Ingeniero', desc: 'Desbloquea la Tesis', icon: '🎓', condition: (completed) => completed.has('IEM-5230') && completed.has('IEM-5680') }
 ];
 
-// --- SISTEMA DE CALIFICACIONES ---
-const GRADE_POINTS = { 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
-
 const App = () => {
     // Estados Persistentes
     const [subjectsData, setSubjectsData] = useState(() => JSON.parse(localStorage.getItem('ingsys_subjects_data')) || DEFAULT_SUBJECTS_DATA);
     const [completed, setCompleted] = useState(() => new Set(JSON.parse(localStorage.getItem('ingsys_completed')) || []));
-    const [grades, setGrades] = useState(() => JSON.parse(localStorage.getItem('ingsys_grades')) || {}); // Nuevo: Calificaciones
+    const [grades, setGrades] = useState(() => JSON.parse(localStorage.getItem('ingsys_grades')) || {});
     const [careerName, setCareerName] = useState(() => localStorage.getItem('ingsys_career_name') || "Ingeniería Mecánica");
+    const [selectedUniversity, setSelectedUniversity] = useState(() => localStorage.getItem('ingsys_university') || 'UASD');
 
     // Efectos de Guardado
     useEffect(() => localStorage.setItem('ingsys_subjects_data', JSON.stringify(subjectsData)), [subjectsData]);
     useEffect(() => localStorage.setItem('ingsys_completed', JSON.stringify([...completed])), [completed]);
     useEffect(() => localStorage.setItem('ingsys_grades', JSON.stringify(grades)), [grades]);
     useEffect(() => localStorage.setItem('ingsys_career_name', careerName), [careerName]);
+    useEffect(() => localStorage.setItem('ingsys_university', selectedUniversity), [selectedUniversity]);
 
     // Estados UI
     const [activeTab, setActiveTab] = useState('available');
@@ -151,25 +200,34 @@ const App = () => {
     const [showCareerModal, setShowCareerModal] = useState(false);
     const [showGradeModal, setShowGradeModal] = useState(null); // ID de materia a calificar
     const [showPlannerModal, setShowPlannerModal] = useState(false);
+    const [gradeInputValue, setGradeInputValue] = useState("");
 
-    // Estados IA
+    // Estados de carga e IA
     const [careerAdvice, setCareerAdvice] = useState(null);
     const [studyPlan, setStudyPlan] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
-    // --- LÓGICA DE GPA ---
+    // Estados Importador PDF
+    const [isParsingPdf, setIsParsingPdf] = useState(false);
+    const [parsingError, setParsingError] = useState(null);
+    const fileInputRef = useRef(null);
+
+    // --- LÓGICA DE GPA DINÁMICA ---
     const calculateGPA = useMemo(() => {
         let totalPoints = 0;
         let totalCredits = 0;
+        const config = UNIVERSITY_CONFIG[selectedUniversity];
+
         Object.entries(grades).forEach(([id, grade]) => {
             const subject = subjectsData.find(s => s.id === id);
-            if (subject && GRADE_POINTS[grade] !== undefined) {
-                totalPoints += GRADE_POINTS[grade] * subject.credits;
+            if (subject) {
+                const points = config.calculatePoints(grade);
+                totalPoints += points * subject.credits;
                 totalCredits += subject.credits;
             }
         });
         return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : "0.00";
-    }, [grades, subjectsData]);
+    }, [grades, subjectsData, selectedUniversity]);
 
     // --- LÓGICA DE PROGRESO Y DEPENDENCIAS ---
     const getDependencyWeight = useMemo(() => {
@@ -195,20 +253,22 @@ const App = () => {
             const isAvailable = !isCompleted && !isLocked;
             const weight = getDependencyWeight[subject.id] || 0;
             const isHighPriority = isAvailable && (weight > 4 || subject.credits >= 5);
-            const grade = grades[subject.id];
-            return { ...subject, isCompleted, isLocked, isAvailable, missingPrereqs, weight, isHighPriority, grade };
+            const rawGrade = grades[subject.id];
+            const config = UNIVERSITY_CONFIG[selectedUniversity];
+            const gradeLabel = rawGrade ? config.getLabel(rawGrade) : null;
+
+            return { ...subject, isCompleted, isLocked, isAvailable, missingPrereqs, weight, isHighPriority, grade: gradeLabel, rawGrade };
         });
-    }, [completed, getDependencyWeight, subjectsData, grades]);
+    }, [completed, getDependencyWeight, subjectsData, grades, selectedUniversity]);
 
     // Listas filtradas
     const availableList = subjectsStatus.filter(s => s.isAvailable);
     const lockedList = subjectsStatus.filter(s => s.isLocked);
     const completedList = subjectsStatus.filter(s => s.isCompleted);
 
-    // Manejo de Toggle con Calificación
+    // Manejo de Toggle
     const handleToggleAttempt = (id) => {
         if (completed.has(id)) {
-            // Si ya está completada, la quitamos (y su nota)
             const newCompleted = new Set(completed);
             newCompleted.delete(id);
             setCompleted(newCompleted);
@@ -216,7 +276,7 @@ const App = () => {
             delete newGrades[id];
             setGrades(newGrades);
         } else {
-            // Si no está completada, abrimos modal para pedir nota
+            setGradeInputValue(""); // Reset input numérico
             setShowGradeModal(id);
         }
     };
@@ -229,37 +289,105 @@ const App = () => {
         setShowGradeModal(null);
     };
 
-    // --- IA FUNCTIONS ---
+    // --- IMPORTADOR DE PDF ---
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsParsingPdf(true);
+        setParsingError(null);
+
+        try {
+            // 1. Convertir a Base64
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            // 2. Prompt para Análisis
+            const prompt = `
+        Analiza este documento PDF que contiene un Pensum o Plan de Estudios universitario.
+        Tu tarea es extraer TODAS las asignaturas y devolverlas estrictamente en formato JSON válido.
+        
+        El formato del JSON debe ser un array de objetos:
+        [
+          { 
+            "id": "CLAVE-101", 
+            "name": "Nombre Asignatura", 
+            "credits": 4, 
+            "prereqs": ["CLAVE-PREVIA1", "CLAVE-PREVIA2"] 
+          }
+        ]
+
+        Reglas Críticas:
+        1. "id": Debe ser la clave o código oficial (ej: MAT-0140). Si no hay clave, inventa una corta única.
+        2. "credits": Número entero.
+        3. "prereqs": Array de strings con los IDs de los prerrequisitos. Si dice "Bachiller" o nada, pon []. Si dice una materia, busca su ID.
+        4. Asegúrate de extraer TODAS las materias de todas las páginas.
+        5. NO incluyas texto markdown (\`\`\`json), solo el array crudo.
+        6. Si el documento tiene el nombre de la carrera, extráelo también, pero el output principal debe ser el array. Pon el nombre de la carrera en el primer objeto con una propiedad especial "careerName" si es posible, o simplemente enfócate en las materias.
+      `;
+
+            // 3. Llamar Servicio
+            const resultText = await callSmartService(prompt, { mimeType: file.type, base64: base64Data });
+
+            // 4. Limpiar y Parsear
+            const cleanJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsedData = JSON.parse(cleanJson);
+
+            if (!Array.isArray(parsedData) || parsedData.length === 0) {
+                throw new Error("El sistema no pudo identificar materias válidas.");
+            }
+
+            // Si el primer objeto trae el nombre de carrera, lo usamos
+            let finalData = parsedData;
+            if (parsedData[0].careerName) {
+                setCareerName(parsedData[0].careerName);
+                // Eliminamos la propiedad temporal si es necesario, o la dejamos
+            } else {
+                setCareerName("Carrera Personalizada");
+            }
+
+            setSubjectsData(finalData);
+            setCompleted(new Set());
+            setGrades({});
+            setShowSettings(false);
+            alert(`¡Éxito! Se importaron ${parsedData.length} asignaturas.`);
+
+        } catch (error) {
+            console.error(error);
+            setParsingError("Error al procesar el archivo. Intenta con un PDF más claro.");
+        } finally {
+            setIsParsingPdf(false);
+        }
+    };
+
+
+    // --- FUNCIONES INTELIGENTES ---
     const handleCareerAdvice = async () => {
         setShowCareerModal(true);
         if (careerAdvice) return;
         setIsGenerating(true);
         const completedNames = completedList.map(s => s.name).join(", ");
         const prompt = `Soy estudiante de ${careerName}. He completado: ${completedNames || "Nada aun"}. Sugiere 3 roles profesionales y habilidades a desarrollar. Sé breve y motivador.`;
-        const result = await callGemini(prompt);
+        const result = await callSmartService(prompt);
         setCareerAdvice(result);
         setIsGenerating(false);
     };
 
     const handleStudyPlan = async (hoursPerDay) => {
         setIsGenerating(true);
-        // Tomamos las top 5 materias disponibles prioritarias
-        const subjectsToStudy = availableList
-            .sort((a, b) => b.weight - a.weight)
-            .slice(0, 5)
-            .map(s => s.name)
-            .join(", ");
-
-        const prompt = `Soy estudiante de ingeniería. Tengo ${hoursPerDay} horas al día para estudiar. Mis materias prioritarias actuales son: ${subjectsToStudy}. 
-    Crea una rutina de estudio semanal (Lunes a Domingo) optimizada. Incluye descansos. Formato Markdown simple.`;
-
-        const result = await callGemini(prompt);
+        const subjectsToStudy = availableList.sort((a, b) => b.weight - a.weight).slice(0, 5).map(s => s.name).join(", ");
+        const prompt = `Soy estudiante de ingeniería. Tengo ${hoursPerDay} horas al día para estudiar. Mis materias prioritarias actuales son: ${subjectsToStudy}. Crea una rutina de estudio semanal (Lunes a Domingo) optimizada. Incluye descansos. Formato Markdown simple.`;
+        const result = await callSmartService(prompt);
         setStudyPlan(result);
         setIsGenerating(false);
     };
 
-    // --- LOGROS DESBLOQUEADOS ---
     const unlockedAchievements = ACHIEVEMENTS_LIST.filter(ach => ach.condition(completed, subjectsData.length));
+    const currentUniversityConfig = UNIVERSITY_CONFIG[selectedUniversity];
 
     return (
         <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-20 md:pb-0">
@@ -272,19 +400,22 @@ const App = () => {
                             <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
                                 <GraduationCap className="text-yellow-400" /> Ingeniero Pro
                             </h1>
-                            <p className="text-blue-200 text-xs">{careerName}</p>
+                            <div className="flex items-center gap-2 text-blue-200 text-xs mt-1">
+                                <span>{careerName}</span>
+                                <span className="w-1 h-1 bg-blue-400 rounded-full"></span>
+                                <span className="flex items-center gap-1"><Building2 size={10}/> {currentUniversityConfig.name}</span>
+                            </div>
                         </div>
 
                         <div className="flex gap-2">
-                            <button onClick={() => setShowSettings(true)} className="p-2 bg-blue-800 rounded-lg"><Settings size={20}/></button>
+                            <button onClick={() => setShowSettings(true)} className="p-2 bg-blue-800 rounded-lg hover:bg-blue-700 transition-colors"><Settings size={20}/></button>
                             <div className="bg-blue-800 px-3 py-1 rounded-lg text-right border border-blue-700">
-                                <div className="text-xs text-blue-300">Índice (GPA)</div>
+                                <div className="text-xs text-blue-300">Índice ({currentUniversityConfig.name})</div>
                                 <div className={`font-bold text-lg ${parseFloat(calculateGPA) >= 3 ? 'text-green-400' : 'text-yellow-400'}`}>{calculateGPA}</div>
                             </div>
                         </div>
                     </div>
 
-                    {/* Barra de Progreso */}
                     <div className="mb-4">
                         <div className="flex justify-between text-xs mb-1 text-blue-200">
                             <span>{completedList.length} / {subjectsData.length} Materias</span>
@@ -295,21 +426,18 @@ const App = () => {
                         </div>
                     </div>
 
-                    {/* Botones de Acción */}
                     <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                        <button onClick={() => setShowPlannerModal(true)} className="bg-indigo-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform">
-                            <Calendar size={16} /> Planificador IA
+                        <button onClick={() => setShowPlannerModal(true)} className="bg-indigo-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform hover:bg-indigo-500">
+                            <Calendar size={16} /> Planificador
                         </button>
-                        <button onClick={handleCareerAdvice} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform">
-                            <Sparkles size={16} /> Coach Carrera
+                        <button onClick={handleCareerAdvice} className="bg-purple-600 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap shadow-lg active:scale-95 transition-transform hover:bg-purple-500">
+                            <Sparkles size={16} /> Orientación
                         </button>
                     </div>
                 </div>
             </div>
 
             <div className="max-w-5xl mx-auto p-4 md:p-6">
-
-                {/* TABS */}
                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 hide-scrollbar">
                     <TabButton active={activeTab === 'available'} onClick={() => setActiveTab('available')} icon={Unlock} label={`Disponibles (${availableList.length})`} color="green" />
                     <TabButton active={activeTab === 'locked'} onClick={() => setActiveTab('locked')} icon={Lock} label="Bloqueadas" color="slate" />
@@ -317,7 +445,6 @@ const App = () => {
                     <TabButton active={activeTab === 'achievements'} onClick={() => setActiveTab('achievements')} icon={Trophy} label="Logros" color="yellow" />
                 </div>
 
-                {/* CONTENIDO */}
                 <div className="min-h-[50vh]">
                     {activeTab === 'available' && (
                         <div className="animate-in fade-in slide-in-from-bottom-4">
@@ -376,35 +503,64 @@ const App = () => {
                 </div>
             </div>
 
-            {/* --- MODALES --- */}
-
-            {/* Modal Calificación */}
+            {/* --- MODAL CALIFICACIÓN --- */}
             {showGradeModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in zoom-in-95">
-                        <h3 className="text-lg font-bold mb-4 text-center">¿Qué nota obtuviste?</h3>
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            {Object.keys(GRADE_POINTS).map(grade => (
+                        <h3 className="text-lg font-bold mb-4 text-center">Calificación ({currentUniversityConfig.name})</h3>
+
+                        {currentUniversityConfig.type === 'letter' ? (
+                            <div className="grid grid-cols-3 gap-3 mb-4">
+                                {currentUniversityConfig.options.map(grade => (
+                                    <button key={grade} onClick={() => confirmGrade(showGradeModal, grade)} className="p-3 rounded-lg border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 font-bold text-xl transition-all">
+                                        {grade}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="space-y-4 mb-4">
+                                <div>
+                                    <label className="block text-sm text-slate-600 mb-1 font-bold">Nota Numérica (0-100)</label>
+                                    <input
+                                        type="number"
+                                        autoFocus
+                                        placeholder="Ej: 85"
+                                        value={gradeInputValue}
+                                        onChange={(e) => setGradeInputValue(e.target.value)}
+                                        className="w-full text-center text-3xl font-bold p-3 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    />
+                                </div>
+
                                 <button
-                                    key={grade}
-                                    onClick={() => confirmGrade(showGradeModal, grade)}
-                                    className="p-3 rounded-lg border-2 border-slate-100 hover:border-blue-500 hover:bg-blue-50 font-bold text-xl transition-all"
+                                    disabled={!gradeInputValue || gradeInputValue < 0 || gradeInputValue > 100}
+                                    onClick={() => confirmGrade(showGradeModal, gradeInputValue)}
+                                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {grade}
+                                    Confirmar Nota
                                 </button>
-                            ))}
-                        </div>
-                        <button onClick={() => setShowGradeModal(null)} className="w-full py-2 text-slate-500 hover:text-slate-800">Cancelar</button>
+
+                                {currentUniversityConfig.allowsAusente && (
+                                    <button
+                                        onClick={() => confirmGrade(showGradeModal, 'AUS')}
+                                        className="w-full bg-slate-100 text-slate-600 py-2 rounded-lg font-medium hover:bg-slate-200 flex items-center justify-center gap-2"
+                                    >
+                                        <AlertCircle size={16}/> Marcar como Ausente
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        <button onClick={() => setShowGradeModal(null)} className="w-full py-2 text-slate-500 hover:text-slate-800 text-sm font-medium">Cancelar</button>
                     </div>
                 </div>
             )}
 
-            {/* Modal Planificador */}
+            {/* --- MODAL PLANIFICADOR --- */}
             {showPlannerModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
                         <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold flex items-center gap-2"><Calendar className="text-indigo-600"/> Planificador IA</h3>
+                            <h3 className="font-bold flex items-center gap-2"><Calendar className="text-indigo-600"/> Planificador de Estudio</h3>
                             <button onClick={() => setShowPlannerModal(false)}><X className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
                         <div className="p-6 overflow-y-auto flex-1">
@@ -434,23 +590,92 @@ const App = () => {
                 </div>
             )}
 
-            {/* Modal Configuración (Simplificado para el ejemplo) */}
+            {/* --- MODAL CONFIGURACIÓN / IMPORTAR (BLOQUEO IMPLEMENTADO) --- */}
             {showSettings && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-sm">
-                        <h3 className="font-bold mb-4">Configuración</h3>
-                        <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-100 text-red-600 py-2 rounded-lg font-bold mb-2">Borrar Todo</button>
-                        <button onClick={() => setShowSettings(false)} className="w-full bg-slate-100 py-2 rounded-lg">Cerrar</button>
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+
+                        <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Settings size={20}/> Configuración</h3>
+                            {/* Si está analizando, ocultamos el botón de cerrar para obligar a esperar */}
+                            {!isParsingPdf && (
+                                <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            )}
+                        </div>
+
+                        <div className="p-6 space-y-6">
+
+                            {/* Sección Importar PDF (Siempre Activa) */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-blue-500" /> Importar Nuevo Pensum (PDF)
+                                </h4>
+                                <div className={`bg-blue-50 p-4 rounded-xl border border-blue-100 text-center relative group ${isParsingPdf ? 'cursor-wait opacity-100' : ''}`}>
+                                    {isParsingPdf ? (
+                                        <div className="flex flex-col items-center gap-3 py-4">
+                                            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                            <p className="text-xs text-blue-600 font-semibold animate-pulse">Analizando documento...</p>
+                                            <p className="text-[10px] text-blue-400">Por favor espera, no cierres esta ventana.</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-8 h-8 text-blue-300 mx-auto mb-2 group-hover:text-blue-500 transition-colors" />
+                                            <p className="text-xs text-slate-500 mb-2">Sube el PDF de tu carrera. El sistema detectará las materias.</p>
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                ref={fileInputRef}
+                                                onChange={handleFileUpload}
+                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                            />
+                                            <button className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold pointer-events-none">
+                                                Seleccionar Archivo
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                {parsingError && <p className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100">{parsingError}</p>}
+                            </div>
+
+                            <div className="h-px bg-slate-100 my-2"></div>
+
+                            {/* Resto de Configuraciones (Bloqueadas si isParsingPdf es true) */}
+                            <div className={`space-y-4 transition-opacity ${isParsingPdf ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+
+                                <div>
+                                    <label className="block text-sm text-slate-500 font-bold mb-2">Universidad (Escala de Notas)</label>
+                                    <div className="grid gap-2">
+                                        {Object.keys(UNIVERSITY_CONFIG).map(uniKey => (
+                                            <button
+                                                key={uniKey}
+                                                onClick={() => setSelectedUniversity(uniKey)}
+                                                className={`w-full p-3 rounded-lg border text-left flex justify-between items-center ${selectedUniversity === uniKey ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 hover:bg-slate-50'}`}
+                                            >
+                                                {UNIVERSITY_CONFIG[uniKey].name}
+                                                {selectedUniversity === uniKey && <CheckCircle size={16}/>}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="border-t pt-4 space-y-2">
+                                    <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full bg-red-50 text-red-600 py-2 rounded-lg font-bold hover:bg-red-100 flex items-center justify-center gap-2">
+                                        <Trash2 size={16}/> Borrar Todo
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Modal Carrera IA (Reutilizado) */}
+            {/* --- MODAL CARRERA --- */}
             {showCareerModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold flex gap-2"><Sparkles className="text-purple-600"/> Orientación</h3>
+                            <h3 className="font-bold flex gap-2"><Sparkles className="text-purple-600"/> Asistente de Carrera</h3>
                             <button onClick={() => setShowCareerModal(false)}><X/></button>
                         </div>
                         {isGenerating ? <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-purple-600"/></div> : <div className="whitespace-pre-wrap">{careerAdvice}</div>}
@@ -464,7 +689,7 @@ const App = () => {
 
 // Componentes UI
 const TabButton = ({ active, onClick, icon: Icon, label, color }) => (
-    <button onClick={onClick} className={`flex-none py-2 px-4 rounded-xl font-bold text-sm flex items-center gap-2 border transition-all ${active ? `bg-${color}-600 text-white border-${color}-600 shadow-md` : `bg-white text-slate-500 border-slate-200`}`}>
+    <button onClick={onClick} className={`flex-none py-2 px-4 rounded-xl font-bold text-sm flex items-center gap-2 border transition-all ${active ? `bg-${color}-600 text-white border-${color}-600 shadow-md` : `bg-white text-slate-500 border-slate-200 hover:bg-slate-50`}`}>
         <Icon size={16} /> {label}
     </button>
 );
@@ -478,7 +703,7 @@ const SubjectCard = ({ subject, onToggle, careerName }) => {
         e.stopPropagation(); setExpanded(true);
         if(aiTip) return;
         setLoading(true);
-        const tip = await callGemini(`Dame 3 tips breves para aprobar ${subject.name} en ${careerName}. Usa emojis.`);
+        const tip = await callSmartService(`Dame 3 consejos breves para aprobar ${subject.name} en ${careerName}. Usa emojis.`);
         setAiTip(tip);
         setLoading(false);
     };
@@ -489,7 +714,9 @@ const SubjectCard = ({ subject, onToggle, careerName }) => {
 
             <div className="flex items-center gap-3" onClick={() => setExpanded(!expanded)}>
                 <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${subject.isCompleted ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
-                    {subject.isCompleted ? (subject.grade || <CheckCircle size={20} />) : null}
+                    {subject.isCompleted ? (
+                        <span className="text-xs font-bold">{subject.grade || <CheckCircle size={20} />}</span>
+                    ) : null}
                 </button>
                 <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm truncate">{subject.name}</div>
@@ -499,14 +726,14 @@ const SubjectCard = ({ subject, onToggle, careerName }) => {
                         {subject.isLocked && <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> Bloqueada</span>}
                     </div>
                 </div>
-                <button onClick={getTip} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-full"><Lightbulb size={20}/></button>
+                <button onClick={getTip} className="p-2 text-indigo-400 hover:bg-indigo-50 rounded-full" title="Tips"><Lightbulb size={20}/></button>
             </div>
 
             {expanded && (
                 <div className="mt-3 pt-3 border-t text-sm bg-slate-50/50 -mx-3 px-3 pb-2 animate-in slide-in-from-top-2">
                     {aiTip || loading ? (
                         <div className="bg-white p-2 rounded border border-indigo-100 mb-2">
-                            <div className="font-bold text-indigo-600 text-xs mb-1">TIPS GEMINI</div>
+                            <div className="font-bold text-indigo-600 text-xs mb-1">CONSEJOS DE ESTUDIO</div>
                             {loading ? <Loader2 className="animate-spin w-4 h-4"/> : aiTip}
                         </div>
                     ) : null}
