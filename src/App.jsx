@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator, Building2 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE API ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-
+ const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
@@ -306,48 +305,62 @@ const App = () => {
                 reader.readAsDataURL(file);
             });
 
-            // 2. Prompt para Análisis
+            // 2. Prompt para Análisis (Reforzado para JSON estricto)
             const prompt = `
-        Analiza este documento PDF que contiene un Pensum o Plan de Estudios universitario.
-        Tu tarea es extraer TODAS las asignaturas y devolverlas estrictamente en formato JSON válido.
+        Analiza este documento PDF (Pensum Universitario).
+        Extrae TODAS las asignaturas.
+        Tu ÚNICA salida debe ser un JSON Array válido. NO escribas introducciones ni markdown.
         
-        El formato del JSON debe ser un array de objetos:
+        Estructura requerida:
         [
           { 
             "id": "CLAVE-101", 
-            "name": "Nombre Asignatura", 
+            "name": "Nombre Exacto", 
             "credits": 4, 
-            "prereqs": ["CLAVE-PREVIA1", "CLAVE-PREVIA2"] 
+            "prereqs": ["CLAVE-PREVIA"] 
           }
         ]
 
-        Reglas Críticas:
-        1. "id": Debe ser la clave o código oficial (ej: MAT-0140). Si no hay clave, inventa una corta única.
-        2. "credits": Número entero.
-        3. "prereqs": Array de strings con los IDs de los prerrequisitos. Si dice "Bachiller" o nada, pon []. Si dice una materia, busca su ID.
-        4. Asegúrate de extraer TODAS las materias de todas las páginas.
-        5. NO incluyas texto markdown (\`\`\`json), solo el array crudo.
-        6. Si el documento tiene el nombre de la carrera, extráelo también, pero el output principal debe ser el array. Pon el nombre de la carrera en el primer objeto con una propiedad especial "careerName" si es posible, o simplemente enfócate en las materias.
+        Reglas:
+        - ID: Usa la clave oficial (ej: MAT-014).
+        - Prereqs: Array de IDs. Si no tiene, usa [].
+        - Si detectas el nombre de la carrera, inclúyelo SOLO en el primer objeto como propiedad "careerName".
       `;
 
             // 3. Llamar Servicio
             const resultText = await callSmartService(prompt, { mimeType: file.type, base64: base64Data });
 
-            // 4. Limpiar y Parsear
-            const cleanJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsedData = JSON.parse(cleanJson);
+            console.log("Respuesta cruda IA:", resultText); // Para depuración en consola
+
+            // 4. Limpiar y Parsear (Lógica Quirúrgica)
+            // Buscamos el primer corchete '[' y el último ']' para ignorar texto basura
+            const firstBracket = resultText.indexOf('[');
+            const lastBracket = resultText.lastIndexOf(']');
+
+            if (firstBracket === -1 || lastBracket === -1) {
+                throw new Error("La IA no devolvió una lista válida (JSON no encontrado).");
+            }
+
+            const cleanJson = resultText.substring(firstBracket, lastBracket + 1);
+
+            let parsedData;
+            try {
+                parsedData = JSON.parse(cleanJson);
+            } catch (jsonError) {
+                console.error("Error parseando JSON:", jsonError);
+                throw new Error("Error de formato en los datos recibidos. Intenta de nuevo.");
+            }
 
             if (!Array.isArray(parsedData) || parsedData.length === 0) {
-                throw new Error("El sistema no pudo identificar materias válidas.");
+                throw new Error("El documento no parece contener materias válidas.");
             }
 
             // Si el primer objeto trae el nombre de carrera, lo usamos
             let finalData = parsedData;
             if (parsedData[0].careerName) {
                 setCareerName(parsedData[0].careerName);
-                // Eliminamos la propiedad temporal si es necesario, o la dejamos
             } else {
-                setCareerName("Carrera Personalizada");
+                setCareerName("Carrera Importada");
             }
 
             setSubjectsData(finalData);
@@ -358,9 +371,12 @@ const App = () => {
 
         } catch (error) {
             console.error(error);
-            setParsingError("Error al procesar el archivo. Intenta con un PDF más claro.");
+            // Mostrar el mensaje real del error para ayudar a depurar
+            setParsingError(error.message || "Error desconocido al procesar.");
         } finally {
             setIsParsingPdf(false);
+            // Limpiar el input para permitir subir el mismo archivo si falló
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
