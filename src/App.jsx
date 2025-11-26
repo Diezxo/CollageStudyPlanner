@@ -2,18 +2,16 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckCircle, Lock, Unlock, GraduationCap, BookOpen, AlertCircle, Calendar, Settings, ChevronDown, ChevronUp, Sparkles, BrainCircuit, Lightbulb, Flame, Clock, RefreshCw, Menu, X, Upload, Save, Trash2, FileText, Loader2, Trophy, Star, TrendingUp, Calculator, Building2, SkipForward } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE API ---
- const apiKey = import.meta.env.VITE_GEMINI_API;
+const apiKey = import.meta.env?.VITE_GEMINI_API || "";
+
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
 // Función auxiliar para llamar al servicio inteligente
 async function callSmartService(prompt, fileData = null) {
-    // Nota: En el entorno local/Vercel, descomenta la validación de apiKey si la necesitas
-    /*
     if (!apiKey) {
-      alert("⚠️ Faltan credenciales. Asegúrate de crear el archivo .env con tu VITE_GEMINI_API_KEY.");
-      return "Error: Falta API Key";
+        alert("⚠️ Faltan credenciales. Asegúrate de crear el archivo .env con tu VITE_GEMINI_API_KEY.");
+        return "Error: Falta API Key";
     }
-    */
 
     try {
         const parts = [{ text: prompt }];
@@ -41,11 +39,11 @@ async function callSmartService(prompt, fileData = null) {
     }
 }
 
-// --- SISTEMAS DE CALIFICACIÓN POR UNIVERSIDAD ---
+// --- SISTEMAS DE CALIFICACIÓN ---
 const UNIVERSITY_CONFIG = {
     'UASD': {
         name: 'UASD',
-        type: 'numeric', // 0-100
+        type: 'numeric',
         min: 0,
         max: 100,
         allowsAusente: true,
@@ -59,10 +57,7 @@ const UNIVERSITY_CONFIG = {
             if (n >= 60) return 1;
             return 0;
         },
-        getLabel: (grade) => {
-            if (!grade) return 'AP'; // Aprobada sin nota
-            return grade === 'AUS' ? 'Ausente' : grade;
-        }
+        getLabel: (grade) => (!grade ? 'AP' : grade === 'AUS' ? 'Ausente' : grade)
     },
     'OYM': {
         name: 'O&M',
@@ -80,17 +75,14 @@ const UNIVERSITY_CONFIG = {
             if (n >= 70) return 1;
             return 0;
         },
-        getLabel: (grade) => {
-            if (!grade) return 'AP';
-            return grade === 'AUS' ? 'Ausente' : grade;
-        }
+        getLabel: (grade) => (!grade ? 'AP' : grade === 'AUS' ? 'Ausente' : grade)
     },
     'PUCMM': {
         name: 'PUCMM',
         type: 'letter',
         options: ['A', 'B', 'C', 'D', 'F'],
         calculatePoints: (grade) => {
-            if (!grade) return 0; // Sin nota no suma al índice
+            if (!grade) return 0;
             const map = { 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0 };
             return map[grade] || 0;
         },
@@ -205,12 +197,16 @@ const App = () => {
     const [careerName, setCareerName] = useState(() => localStorage.getItem('ingsys_career_name') || "Ingeniería Mecánica");
     const [selectedUniversity, setSelectedUniversity] = useState(() => localStorage.getItem('ingsys_university') || 'UASD');
 
+    // --- NUEVO: Estado para materias por semestre ---
+    const [subjectsPerSemester, setSubjectsPerSemester] = useState(() => Number(localStorage.getItem('ingsys_subjects_per_sem')) || 5);
+
     // Efectos de Guardado
     useEffect(() => localStorage.setItem('ingsys_subjects_data', JSON.stringify(subjectsData)), [subjectsData]);
     useEffect(() => localStorage.setItem('ingsys_completed', JSON.stringify([...completed])), [completed]);
     useEffect(() => localStorage.setItem('ingsys_grades', JSON.stringify(grades)), [grades]);
     useEffect(() => localStorage.setItem('ingsys_career_name', careerName), [careerName]);
     useEffect(() => localStorage.setItem('ingsys_university', selectedUniversity), [selectedUniversity]);
+    useEffect(() => localStorage.setItem('ingsys_subjects_per_sem', subjectsPerSemester), [subjectsPerSemester]);
 
     // Estados UI
     const [activeTab, setActiveTab] = useState('available');
@@ -219,25 +215,23 @@ const App = () => {
     const [showGradeModal, setShowGradeModal] = useState(null);
     const [showPlannerModal, setShowPlannerModal] = useState(false);
     const [gradeInputValue, setGradeInputValue] = useState("");
+    const [suggestedSchedule, setSuggestedSchedule] = useState(null); // Estado para el horario sugerido
 
-    // Estados de carga e IA
+    // Estados IA & Archivos
     const [careerAdvice, setCareerAdvice] = useState(null);
     const [studyPlan, setStudyPlan] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
-
-    // Estados Importador PDF
     const [isParsingPdf, setIsParsingPdf] = useState(false);
     const [parsingError, setParsingError] = useState(null);
     const fileInputRef = useRef(null);
 
-    // --- LÓGICA DE GPA DINÁMICA ---
+    // --- LÓGICA DE GPA ---
     const calculateGPA = useMemo(() => {
         let totalPoints = 0;
         let totalCredits = 0;
         const config = UNIVERSITY_CONFIG[selectedUniversity];
 
         Object.entries(grades).forEach(([id, grade]) => {
-            // Solo calculamos si hay una nota válida (no null/undefined)
             if (grade !== null && grade !== undefined) {
                 const subject = subjectsData.find(s => s.id === id);
                 if (subject) {
@@ -282,11 +276,27 @@ const App = () => {
         });
     }, [completed, getDependencyWeight, subjectsData, grades, selectedUniversity]);
 
+    // Filtrado
     const availableList = subjectsStatus.filter(s => s.isAvailable);
     const lockedList = subjectsStatus.filter(s => s.isLocked);
     const completedList = subjectsStatus.filter(s => s.isCompleted);
 
-    // Manejo de Toggle
+    // --- NUEVO: Cálculos de Tiempo ---
+    const remainingSubjectsCount = subjectsStatus.filter(s => !s.isCompleted).length;
+    const estimatedSemesters = remainingSubjectsCount > 0 ? Math.ceil(remainingSubjectsCount / subjectsPerSemester) : 0;
+
+    // --- NUEVO: Generador de Horario ---
+    const generateSchedule = () => {
+        // Ordenar disponibles por: 1. Prioridad (Peso), 2. Créditos
+        const sorted = [...availableList].sort((a, b) => b.weight - a.weight || b.credits - a.credits);
+        // Tomar los primeros N según configuración
+        const suggested = sorted.slice(0, subjectsPerSemester);
+        setSuggestedSchedule(suggested);
+        setActiveTab('available');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    // Manejo de acciones
     const handleToggleAttempt = (id) => {
         if (completed.has(id)) {
             const newCompleted = new Set(completed);
@@ -295,30 +305,28 @@ const App = () => {
             const newGrades = { ...grades };
             delete newGrades[id];
             setGrades(newGrades);
+            setSuggestedSchedule(null); // Resetear sugerencia si cambia el estado
         } else {
             setGradeInputValue("");
             setShowGradeModal(id);
         }
     };
 
-    // Función confirmar nota (o null si es opcional)
     const confirmGrade = (id, grade) => {
         const newCompleted = new Set(completed);
         newCompleted.add(id);
         setCompleted(newCompleted);
-        // Si grade es null, guardamos null para indicar "Aprobada sin nota"
         setGrades({ ...grades, [id]: grade });
         setShowGradeModal(null);
+        setSuggestedSchedule(null);
     };
 
-    // --- IMPORTADOR DE PDF ---
+    // Importador PDF
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         setIsParsingPdf(true);
         setParsingError(null);
-
         try {
             const base64Data = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -326,59 +334,49 @@ const App = () => {
                 reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
-
-            const prompt = `Analiza este documento PDF (Pensum). Extrae TODAS las asignaturas en un JSON Array puro.
-        Estructura: [{ "id": "CLAVE", "name": "Nombre", "credits": 4, "prereqs": ["REQ1"] }]
-        Reglas: Sin markdown. Solo JSON. Si hay nombre de carrera, ponlo en el primer objeto como "careerName".`;
-
+            const prompt = `Analiza este PDF. Extrae TODAS las asignaturas en JSON Array puro. Estructura: [{ "id": "CLAVE", "name": "Nombre", "credits": 4, "prereqs": ["REQ1"] }]. Sin markdown.`;
             const resultText = await callSmartService(prompt, { mimeType: file.type, base64: base64Data });
 
             const firstBracket = resultText.indexOf('[');
             const lastBracket = resultText.lastIndexOf(']');
-            if (firstBracket === -1) throw new Error("No se encontraron datos válidos.");
-
+            if (firstBracket === -1) throw new Error("Datos no encontrados.");
             const parsedData = JSON.parse(resultText.substring(firstBracket, lastBracket + 1));
 
-            if (!Array.isArray(parsedData) || parsedData.length === 0) throw new Error("Datos vacíos.");
+            if (!Array.isArray(parsedData)) throw new Error("Formato incorrecto.");
 
             let finalData = parsedData;
-            if (parsedData[0].careerName) {
-                setCareerName(parsedData[0].careerName);
-            } else {
-                setCareerName("Carrera Importada");
-            }
+            if (parsedData[0].careerName) setCareerName(parsedData[0].careerName);
+            else setCareerName("Carrera Importada");
 
             setSubjectsData(finalData);
-            setCompleted(new Set());
-            setGrades({});
+            setCompleted(new Set()); setGrades({}); setSuggestedSchedule(null);
             setShowSettings(false);
-            alert(`¡Éxito! ${parsedData.length} asignaturas importadas.`);
-
+            alert(`¡Éxito! ${parsedData.length} materias importadas.`);
         } catch (error) {
             console.error(error);
-            setParsingError(error.message || "Error procesando archivo.");
+            setParsingError(error.message || "Error procesando.");
         } finally {
             setIsParsingPdf(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
-    // --- FUNCIONES INTELIGENTES ---
+    // Funciones IA
     const handleCareerAdvice = async () => {
         setShowCareerModal(true);
         if (careerAdvice) return;
         setIsGenerating(true);
-        const completedNames = completedList.map(s => s.name).join(", ");
-        const prompt = `Soy estudiante de ${careerName}. He completado: ${completedNames || "Nada"}. Sugiere 3 roles profesionales. Sé breve.`;
+        const names = completedList.map(s => s.name).join(", ");
+        const prompt = `Estudiante de ${careerName}. Completado: ${names}. Sugiere 3 roles profesionales.`;
         const result = await callSmartService(prompt);
         setCareerAdvice(result);
         setIsGenerating(false);
     };
 
-    const handleStudyPlan = async (hoursPerDay) => {
+    const handleStudyPlan = async (hours) => {
         setIsGenerating(true);
-        const subjectsToStudy = availableList.sort((a, b) => b.weight - a.weight).slice(0, 5).map(s => s.name).join(", ");
-        const prompt = `Estudio ${careerName}. Tengo ${hoursPerDay}h/día. Materias: ${subjectsToStudy}. Rutina semanal breve.`;
+        const subjects = availableList.sort((a, b) => b.weight - a.weight).slice(0, 5).map(s => s.name).join(", ");
+        const prompt = `Tengo ${hours}h/día. Materias: ${subjects}. Rutina semanal.`;
         const result = await callSmartService(prompt);
         setStudyPlan(result);
         setIsGenerating(false);
@@ -406,11 +404,46 @@ const App = () => {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setShowSettings(true)} className="p-2 bg-blue-800 rounded-lg hover:bg-blue-700"><Settings size={20}/></button>
-                            <div className="bg-blue-800 px-3 py-1 rounded-lg text-right border border-blue-700">
+                            <div className="bg-blue-800 px-3 py-1 rounded-lg text-right border border-blue-700 min-w-[80px]">
                                 <div className="text-xs text-blue-300">Índice</div>
                                 <div className={`font-bold text-lg ${parseFloat(calculateGPA) >= 3 ? 'text-green-400' : 'text-yellow-400'}`}>{calculateGPA}</div>
                             </div>
                         </div>
+                    </div>
+
+                    {/* --- PANEL DE CONTROL RESTAURADO --- */}
+                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-blue-800/50 p-3 rounded-xl border border-blue-700/50 mb-4 backdrop-blur-sm">
+
+                        {/* Estimación de Tiempo */}
+                        <div className="flex items-center gap-2 text-sm font-medium min-w-[140px]">
+                            <Calendar className="w-4 h-4 text-blue-300" />
+                            <span>{estimatedSemesters} Semestres rest.</span>
+                        </div>
+
+                        {/* Selector Materias por Semestre */}
+                        <div className="flex items-center gap-2 bg-blue-900/60 px-2 py-1.5 rounded-lg border border-blue-700">
+                            <span className="text-xs text-blue-300">Materias/Sem:</span>
+                            <select
+                                value={subjectsPerSemester}
+                                onChange={(e) => setSubjectsPerSemester(Number(e.target.value))}
+                                className="bg-transparent text-white text-sm font-bold focus:outline-none cursor-pointer appearance-none pr-4 relative z-10"
+                                style={{ backgroundImage: 'none' }}
+                            >
+                                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n} className="text-slate-900">{n}</option>)}
+                            </select>
+                            <ChevronDown size={12} className="text-blue-300 -ml-4 pointer-events-none" />
+                        </div>
+
+                        <div className="flex-grow"></div>
+
+                        {/* Botón Armar Horario */}
+                        <button
+                            onClick={generateSchedule}
+                            className="w-full sm:w-auto bg-green-500 hover:bg-green-400 text-blue-900 font-bold px-4 py-1.5 rounded-lg shadow-lg flex justify-center items-center gap-2 text-sm transition-all active:scale-95"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                            Armar Próximo Semestre
+                        </button>
                     </div>
 
                     <div className="mb-4">
@@ -434,7 +467,7 @@ const App = () => {
                 </div>
             </div>
 
-            {/* MAIN CONTENT */}
+            {/* CONTENT */}
             <div className="max-w-5xl mx-auto p-4 md:p-6">
                 <div className="flex gap-2 mb-6 overflow-x-auto pb-2 hide-scrollbar">
                     <TabButton active={activeTab === 'available'} onClick={() => setActiveTab('available')} icon={Unlock} label={`Disponibles (${availableList.length})`} color="green" />
@@ -446,6 +479,35 @@ const App = () => {
                 <div className="min-h-[50vh]">
                     {activeTab === 'available' && (
                         <div className="animate-in fade-in slide-in-from-bottom-4">
+
+                            {/* --- SECCIÓN HORARIO SUGERIDO RESTAURADA --- */}
+                            {suggestedSchedule && (
+                                <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-xl relative overflow-hidden shadow-sm animate-in zoom-in-95">
+                                    <div className="flex justify-between items-start mb-3 relative z-10">
+                                        <div>
+                                            <h2 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                                                <span className="bg-green-600 text-white p-1 rounded-full"><CheckCircle size={14}/></span>
+                                                Sugerencia Óptima
+                                            </h2>
+                                            <p className="text-xs text-green-700 mt-1">Basado en ruta crítica y tu límite de {subjectsPerSemester} materias.</p>
+                                        </div>
+                                        <button onClick={() => setSuggestedSchedule(null)} className="p-2 -mr-2 text-green-600 hover:bg-green-100 rounded-full"><X size={16}/></button>
+                                    </div>
+                                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 relative z-10">
+                                        {suggestedSchedule.map(s => (
+                                            <div key={s.id} className="bg-white p-3 rounded-lg border border-green-100 shadow-sm flex items-center justify-between">
+                                                <span className="font-semibold text-sm text-slate-700 truncate w-3/4">{s.name}</span>
+                                                <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-mono">{s.credits} CR</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="mt-3 pt-2 border-t border-green-200 text-right">
+                                        <span className="text-xs font-bold text-green-800">Total Créditos: {suggestedSchedule.reduce((acc, curr) => acc + curr.credits, 0)}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Listas normales */}
                             {availableList.some(s => s.isHighPriority) && (
                                 <div className="mb-6">
                                     <h3 className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -469,6 +531,7 @@ const App = () => {
                         </div>
                     )}
 
+                    {/* ... Resto de Tabs igual ... */}
                     {activeTab === 'locked' && (
                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                             {lockedList.map(s => <SubjectCard key={s.id} subject={s} onToggle={() => handleToggleAttempt(s.id)} careerName={careerName} />)}
@@ -537,16 +600,14 @@ const App = () => {
                                     Confirmar Nota
                                 </button>
 
-                                {/* BOTONES OPCIONALES */}
                                 <div className="flex gap-2">
                                     {currentUniversityConfig.allowsAusente && (
                                         <button onClick={() => confirmGrade(showGradeModal, 'AUS')} className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg font-medium hover:bg-red-100 text-sm flex items-center justify-center gap-1">
                                             <AlertCircle size={14}/> Ausente
                                         </button>
                                     )}
-                                    {/* BOTÓN "SIN NOTA" (NUEVO) */}
                                     <button onClick={() => confirmGrade(showGradeModal, null)} className="flex-1 bg-green-50 text-green-700 py-2 rounded-lg font-medium hover:bg-green-100 text-sm flex items-center justify-center gap-1">
-                                        <SkipForward size={14}/> Omitir Nota
+                                        <SkipForward size={14}/> Omitir
                                     </button>
                                 </div>
                             </div>
@@ -557,7 +618,7 @@ const App = () => {
                 </div>
             )}
 
-            {/* --- MODAL CONFIGURACIÓN --- */}
+            {/* --- MODAL CONFIGURACIÓN (con bloqueo durante carga) --- */}
             {showSettings && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -613,7 +674,6 @@ const App = () => {
             )}
 
             {/* --- OTROS MODALES (PLANNER / CARRERA) --- */}
-            {/* (Se mantienen igual que antes, solo renderizan si se activan) */}
             {showPlannerModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
